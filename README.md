@@ -1,14 +1,14 @@
 # Linear Issue Maker
 
-A Python CLI that parses structured text or CSV files describing Linear issues and creates them via the Linear MCP server.
+A Python CLI that creates Linear issues from CSV files via the Linear MCP server.
 
 ## Features
 
-- **Single issue creation** from text files with header format
-- **Batch issue creation** from CSV files
-- **Dry-run mode** to preview issues before creating
-- **Progress tracking** for batch operations
-- **Error handling** with continue-on-error support for batch operations
+- **Batch CSV import** - Create multiple issues from spreadsheet exports
+- **Auto-create projects** - Automatically create projects if they don't exist
+- **Dry-run mode** - Preview issues before creating
+- **Progress tracking** - Real-time progress during batch operations
+- **Error handling** - Continue-on-error support with detailed reporting
 
 ## Installation
 
@@ -29,65 +29,41 @@ A Python CLI that parses structured text or CSV files describing Linear issues a
    LINEAR_MCP_ACCESS_TOKEN=lin_api_xxxxxxxxx
    ```
 
-3. Create a single issue:
+3. Create issues from CSV:
    ```bash
-   linear-issue-maker create -i example-issue.txt --no-dry-run
-   ```
-
-4. Batch create from CSV:
-   ```bash
-   linear-issue-maker batch-csv -i examples/issues.csv --no-dry-run
+   linear-issue-maker create -i examples/issues.csv --no-dry-run
    ```
 
 ## Usage
 
-### Single Issue Format
-
-Create a text file with headers:
-
-```
-Team: VisionaryASC–NGynS
-Project: Claimed Provider Profiles
-Title: User sign up
-Summary:
-As a provider, I want to sign up with my email and password.
-```
-
-**Commands:**
-```bash
-# Parse and validate (dry-run)
-linear-issue-maker parse -i issue.txt
-
-# Create issue (dry-run by default)
-linear-issue-maker create -i issue.txt
-
-# Actually create the issue
-linear-issue-maker create -i issue.txt --no-dry-run
-```
-
-### Batch CSV Format
+### CSV Format
 
 Create a CSV file with columns: `Team`, `Project`, `Title`, `Summary`
 
 ```csv
 Team,Project,Title,Summary
-VisionaryASC–NGynS,Claimed Provider Profiles,User sign up,"As a provider, I want to sign up."
-VisionaryASC–NGynS,Admin,User management,"As an admin, I want to manage users."
+VisionaryASC–NGynS,Claimed Provider Profiles,User sign up,"As a provider, I want to sign up with email and password."
+VisionaryASC–NGynS,Claimed Provider Profiles,Password reset,"As a provider, I want to reset my password via email."
+VisionaryASC–NGynS,Admin,User management,"As an admin, I want to view and manage all users."
 ```
 
-**Commands:**
+### Commands
+
 ```bash
-# Preview issues from CSV (dry-run)
-linear-issue-maker batch-csv -i issues.csv
+# Preview issues (dry-run)
+linear-issue-maker create -i issues.csv
 
 # Create all issues
-linear-issue-csv batch-csv -i issues.csv --no-dry-run
+linear-issue-maker create -i issues.csv --no-dry-run
+
+# Auto-create missing projects
+linear-issue-maker create -i issues.csv --no-dry-run --create-missing-projects
 
 # Continue even if some issues fail
-linear-issue-maker batch-csv -i issues.csv --no-dry-run --continue-on-error
+linear-issue-maker create -i issues.csv --no-dry-run --continue-on-error
 
 # Use tab-separated values
-linear-issue-maker batch-csv -i issues.tsv --delimiter $'\t' --no-dry-run
+linear-issue-maker create -i issues.tsv --delimiter $'\t' --no-dry-run
 ```
 
 ## Configuration
@@ -102,8 +78,6 @@ CLI flags override environment variables:
 - `--token-path`: Path to token file
 - `--server-url`: MCP server endpoint
 
-## Examples
+## Example
 
-See the `examples/` directory:
-- [`example-issue.txt`](example-issue.txt) - Single issue format
-- [`examples/issues.csv`](examples/issues.csv) - Batch CSV format
+See [`examples/issues.csv`](examples/issues.csv) for a sample CSV file with multiple issues.

@@ -1,21 +1,15 @@
-"""Utilities for turning text blocks into structured Linear issue specifications."""
+"""Utilities for parsing CSV files into structured Linear issue specifications."""
 
 from __future__ import annotations
 
 import csv
-import re
 from io import StringIO
-from typing import Dict
 
 from pydantic import BaseModel, ValidationInfo, field_validator
 
-_HEADER_PATTERN = re.compile(r"^(?P<key>[A-Za-z]+):\s*(?P<value>.*)$")
-_VALID_HEADERS = {"team", "project", "title", "summary"}
-_REQUIRED_HEADERS = {"team", "project", "title", "summary"}
-
 
 class IssueSpec(BaseModel):
-    """Structured issue data parsed from the user's text block."""
+    """Structured issue data parsed from CSV."""
 
     team: str
     project: str
@@ -29,56 +23,6 @@ class IssueSpec(BaseModel):
             msg = f"Field '{info.field_name}' cannot be empty"
             raise ValueError(msg)
         return value.strip()
-
-
-def parse_issue_spec(raw_text: str) -> IssueSpec:
-    """Parse the incoming text and return a structured :class:`IssueSpec`.
-
-    The expected format is simple ``Header: value`` pairs for Team, Project,
-    and Title. ``Summary:`` marks the start of a free-form body that extends to EOF.
-    """
-
-    if not raw_text.strip():
-        raise ValueError("Input text is empty")
-
-    values: Dict[str, str] = {}
-    summary_lines: list[str] = []
-    in_summary = False
-
-    for line in raw_text.splitlines():
-        if not in_summary:
-            match = _HEADER_PATTERN.match(line.strip())
-            if match:
-                key = match.group("key").lower()
-                value = match.group("value")
-                if key not in _VALID_HEADERS:
-                    raise ValueError(f"Unknown header '{match.group('key')}'")
-                if key == "summary":
-                    in_summary = True
-                    if value:
-                        summary_lines.append(value)
-                else:
-                    if key in values:
-                        raise ValueError(f"Duplicate header '{match.group('key')}'")
-                    values[key] = value.strip()
-            elif not line.strip():
-                continue
-            else:
-                raise ValueError(f"Unexpected content before Summary: '{line}'")
-        else:
-            summary_lines.append(line)
-
-    if not in_summary:
-        raise ValueError("Missing 'Summary' section")
-
-    values["summary"] = "\n".join(summary_lines).strip()
-
-    missing = _REQUIRED_HEADERS - values.keys()
-    if missing:
-        missing_headers = ", ".join(sorted(missing))
-        raise ValueError(f"Missing headers: {missing_headers}")
-
-    return IssueSpec(**values)
 
 
 def parse_csv_specs(csv_text: str, delimiter: str = ",") -> list[IssueSpec]:

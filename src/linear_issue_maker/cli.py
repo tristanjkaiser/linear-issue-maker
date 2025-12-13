@@ -10,10 +10,10 @@ import typer
 from rich import print_json
 
 from .mcp_client import LinearMCPClient, LinearMCPError, _record_id
-from .parser import IssueSpec, parse_csv_specs, parse_issue_spec
+from .parser import IssueSpec, parse_csv_specs
 from .settings import LinearMCPConfig
 
-app = typer.Typer(help="Turn structured text into Linear issues via MCP.")
+app = typer.Typer(help="Create Linear issues from CSV files via MCP.")
 
 
 def _read_text(source: Optional[Path]) -> str:
@@ -22,111 +22,8 @@ def _read_text(source: Optional[Path]) -> str:
     return typer.get_text_stream("stdin").read()
 
 
-def _echo_spec(spec: IssueSpec) -> None:
-    print_json(data=spec.model_dump())
-
-
-@app.command()
-def parse(
-    input_file: Optional[Path] = typer.Option(
-        None,
-        "--input",
-        "-i",
-        exists=True,
-        dir_okay=False,
-        readable=True,
-        help="Path to the text block file. Reads stdin when omitted.",
-    ),
-) -> None:
-    """Parse the input and output the structured representation."""
-
-    raw_text = _read_text(input_file)
-    spec = parse_issue_spec(raw_text)
-    _echo_spec(spec)
-
-
 @app.command()
 def create(
-    input_file: Optional[Path] = typer.Option(
-        None,
-        "--input",
-        "-i",
-        exists=True,
-        dir_okay=False,
-        readable=True,
-        help="Path to the text block file. Reads stdin when omitted.",
-    ),
-    dry_run: bool = typer.Option(True, help="When true, only parse and display the payload."),
-    create_missing_projects: bool = typer.Option(
-        False,
-        help="Automatically create project if it doesn't exist.",
-    ),
-    server_url: Optional[str] = typer.Option(
-        None,
-        "--server-url",
-        envvar="LINEAR_MCP_SERVER_URL",
-        help="Override the Linear MCP URL (default points to hosted service).",
-    ),
-    token: Optional[str] = typer.Option(
-        None,
-        "--token",
-        envvar="LINEAR_MCP_ACCESS_TOKEN",
-        help="Bearer token returned by `codex mcp login linear`.",
-    ),
-    token_path: Optional[Path] = typer.Option(
-        None,
-        "--token-path",
-        envvar="LINEAR_MCP_TOKEN_PATH",
-        exists=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Path to a file that stores the bearer token (alternative to --token).",
-    ),
-) -> None:
-    """Create a Linear issue via MCP (dry-run by default)."""
-
-    raw_text = _read_text(input_file)
-    spec = parse_issue_spec(raw_text)
-    if dry_run:
-        typer.echo("Dry run – parsed payload:")
-        _echo_spec(spec)
-        raise typer.Exit(code=0)
-
-    config_kwargs: dict[str, Any] = {}
-    if server_url is not None:
-        config_kwargs["server_url"] = server_url
-    if token is not None:
-        config_kwargs["access_token"] = token
-    if token_path is not None:
-        config_kwargs["token_path"] = token_path
-
-    try:
-        config = LinearMCPConfig(**config_kwargs)
-    except Exception as exc:  # pragma: no cover - depends on user env
-        typer.secho(f"Failed to load MCP configuration: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1) from exc
-
-    async def _run() -> dict[str, Any]:
-        async with LinearMCPClient(config) as client:
-            identifiers = await client.resolve_identifiers(
-                spec.team, spec.project, create_missing_projects=create_missing_projects
-            )
-            issue = await client.create_issue(spec, identifiers)
-            return issue
-
-    try:
-        issue_payload = anyio.run(_run)
-    except LinearMCPError as exc:
-        typer.secho(f"MCP error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1) from exc
-
-    typer.echo("Successfully created issue via Linear MCP:")
-    print_json(data=issue_payload)
-
-
-@app.command()
-def batch_csv(
     input_file: Optional[Path] = typer.Option(
         None,
         "--input",
@@ -146,7 +43,7 @@ def batch_csv(
         False,
         help="Continue processing remaining issues if one fails.",
     ),
-    progress: bool = typer.Option(True, help="Show progress bar during batch creation."),
+    progress: bool = typer.Option(True, help="Show progress during creation."),
     server_url: Optional[str] = typer.Option(
         None,
         "--server-url",
@@ -170,7 +67,7 @@ def batch_csv(
         help="Path to file containing bearer token.",
     ),
 ) -> None:
-    """Create multiple Linear issues from a CSV file."""
+    """Create Linear issues from a CSV file."""
 
     # Read and parse CSV
     csv_text = _read_text(input_file)

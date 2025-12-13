@@ -1,6 +1,0 @@
-Team,Project,Title,Summary
-VisionaryASC–NGynS,Claimed Provider Profiles,User sign up,"As a provider, I want to sign up with my email and password so that I can create an account."
-VisionaryASC–NGynS,Claimed Provider Profiles,Password reset,"As a provider, I want to reset my password via email so that I can regain access to my account if I forget my password."
-VisionaryASC–NGynS,Claimed Provider Profiles,Email verification,"As a provider, I want to verify my email address after signing up so that the system knows my email is valid."
-VisionaryASC–NGynS,Claimed Provider Profiles,Profile completion,"As a provider, I want to complete my professional profile including credentials, specialties, and locations so that patients can find accurate information about me."
-VisionaryASC–NGynS,Admin,User management dashboard,"As an admin, I want to view and manage all provider accounts so that I can help users with account issues and moderate the platform."

@@ -2,9 +2,7 @@
 .env
 .env.local
 
-# Example and test files
-example-issue.txt
-test-issue-*.txt
+# Test files
 test-auto-create.csv
 examples/
 
