@@ -1,0 +1,5 @@
+Team: VisionaryASC–NGynS
+Project: Claimed Provider Profiles
+Title: Sign up
+Summary:
+As a provider, I want to sign up with my email and password.
