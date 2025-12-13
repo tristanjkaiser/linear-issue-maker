@@ -42,9 +42,8 @@ Create a CSV file with columns: `Team`, `Project`, `Title`, `Summary`
 
 ```csv
 Team,Project,Title,Summary
-VisionaryASC–NGynS,Claimed Provider Profiles,User sign up,"As a provider, I want to sign up with email and password."
-VisionaryASC–NGynS,Claimed Provider Profiles,Password reset,"As a provider, I want to reset my password via email."
-VisionaryASC–NGynS,Admin,User management,"As an admin, I want to view and manage all users."
+The A Team,User Project,User Sign Up,"As a user, I want to sign up with email and password."
+The A Team,Admin Project,Admin Portal Icon,"As an admin, I want a silly icon and affirming statement to greet me in the portal every day."
 ```
 
 ### Commands
@@ -77,7 +76,3 @@ CLI flags override environment variables:
 - `--token`: Bearer token
 - `--token-path`: Path to token file
 - `--server-url`: MCP server endpoint
-
-## Example
-
-See [`examples/issues.csv`](examples/issues.csv) for a sample CSV file with multiple issues.
