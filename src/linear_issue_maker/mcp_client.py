@@ -103,11 +103,24 @@ class LinearMCPClient:
         self._session = session
         return session
 
-    async def resolve_identifiers(self, team: str, project: str) -> LinearIdentifiers:
-        """Resolve team and project names into structured records."""
+    async def resolve_identifiers(
+        self, team: str, project: str, *, create_missing_projects: bool = False
+    ) -> LinearIdentifiers:
+        """Resolve team and project names into structured records.
 
+        Args:
+            team: Team name or ID to resolve
+            project: Project name or ID to resolve
+            create_missing_projects: If True, create project if it doesn't exist
+
+        Returns:
+            LinearIdentifiers with resolved team and project
+
+        Raises:
+            LinearMCPError: If team or project cannot be resolved/created
+        """
         team_record = await self._resolve_team(team)
-        project_record = await self._resolve_project(project, team_record)
+        project_record = await self._resolve_project(project, team_record, create_missing_projects)
         return LinearIdentifiers(team=team_record, project=project_record)
 
     async def create_issue(self, spec: IssueSpec, identifiers: LinearIdentifiers) -> JsonDict:
@@ -128,10 +141,22 @@ class LinearMCPClient:
         teams = await self._list_teams()
         return self._match_record(teams, team_name, "team")
 
-    async def _resolve_project(self, project_name: str, team: JsonDict) -> JsonDict:
+    async def _resolve_project(
+        self, project_name: str, team: JsonDict, create_if_missing: bool = False
+    ) -> JsonDict:
+        """Resolve project by name, optionally creating it if not found."""
         team_id = _record_id(team)
         projects = await self._list_projects(team_id)
-        return self._match_record(projects, project_name, "project")
+
+        try:
+            return self._match_record(projects, project_name, "project")
+        except LinearMCPError as exc:
+            if not create_if_missing:
+                raise
+
+            # Project not found, create it
+            team_name = team.get("name", team_id)
+            return await self._create_project(project_name, team_id, team_name)
 
     async def _list_teams(self) -> list[JsonDict]:
         if self._teams_cache is not None:
@@ -150,6 +175,25 @@ class LinearMCPClient:
         projects = self._extract_structured_list(result, self.config.list_projects_tool)
         self._projects_cache[team_id] = projects
         return projects
+
+    async def _create_project(self, name: str, team_id: str, team_name: str) -> JsonDict:
+        """Create a new project in Linear."""
+        arguments = {
+            "name": name,
+            "team": team_id,
+            "color": "#bec2c8",  # Default gray color
+        }
+
+        result = await self._call_tool("create_project", arguments=arguments)
+        project = self._extract_structured_dict(result, "create_project")
+
+        # Add to cache
+        if team_id in self._projects_cache:
+            self._projects_cache[team_id].append(project)
+        else:
+            self._projects_cache[team_id] = [project]
+
+        return project
 
     async def _call_tool(self, name: str, arguments: JsonDict | None = None) -> CallToolResult:
         session = await self._ensure_session()

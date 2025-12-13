@@ -9,7 +9,7 @@ import anyio
 import typer
 from rich import print_json
 
-from .mcp_client import LinearMCPClient, LinearMCPError
+from .mcp_client import LinearMCPClient, LinearMCPError, _record_id
 from .parser import IssueSpec, parse_csv_specs, parse_issue_spec
 from .settings import LinearMCPConfig
 
@@ -57,6 +57,10 @@ def create(
         help="Path to the text block file. Reads stdin when omitted.",
     ),
     dry_run: bool = typer.Option(True, help="When true, only parse and display the payload."),
+    create_missing_projects: bool = typer.Option(
+        False,
+        help="Automatically create project if it doesn't exist.",
+    ),
     server_url: Optional[str] = typer.Option(
         None,
         "--server-url",
@@ -105,7 +109,9 @@ def create(
 
     async def _run() -> dict[str, Any]:
         async with LinearMCPClient(config) as client:
-            identifiers = await client.resolve_identifiers(spec.team, spec.project)
+            identifiers = await client.resolve_identifiers(
+                spec.team, spec.project, create_missing_projects=create_missing_projects
+            )
             issue = await client.create_issue(spec, identifiers)
             return issue
 
@@ -132,6 +138,10 @@ def batch_csv(
     ),
     dry_run: bool = typer.Option(True, help="When true, only parse and display the issues."),
     delimiter: str = typer.Option(",", help="CSV delimiter character (default: comma)."),
+    create_missing_projects: bool = typer.Option(
+        False,
+        help="Automatically create projects if they don't exist.",
+    ),
     continue_on_error: bool = typer.Option(
         False,
         help="Continue processing remaining issues if one fails.",
@@ -201,6 +211,7 @@ def batch_csv(
     async def _run_batch() -> tuple[list[dict[str, Any]], list[tuple[IssueSpec, str]]]:
         created: list[dict[str, Any]] = []
         failed: list[tuple[IssueSpec, str]] = []
+        created_projects: set[str] = set()
 
         async with LinearMCPClient(config) as client:
             for i, spec in enumerate(specs, 1):
@@ -208,7 +219,28 @@ def batch_csv(
                     typer.echo(f"[{i}/{len(specs)}] Creating: {spec.title}")
 
                 try:
-                    identifiers = await client.resolve_identifiers(spec.team, spec.project)
+                    # Check if we're creating a project
+                    project_key = f"{spec.team}/{spec.project}"
+                    if create_missing_projects and project_key not in created_projects:
+                        # Try to resolve, which may create the project
+                        identifiers = await client.resolve_identifiers(
+                            spec.team, spec.project, create_missing_projects=True
+                        )
+                        # Track if this is a newly created project
+                        if progress and spec.project not in [
+                            p.get("name", "") for p in await client._list_projects(_record_id(identifiers.team))
+                            if p.get("id") != identifiers.project.get("id")
+                        ]:
+                            created_projects.add(project_key)
+                            typer.secho(
+                                f"  → Created new project: {spec.project}",
+                                fg=typer.colors.YELLOW,
+                            )
+                    else:
+                        identifiers = await client.resolve_identifiers(
+                            spec.team, spec.project, create_missing_projects=create_missing_projects
+                        )
+
                     issue = await client.create_issue(spec, identifiers)
                     created.append(issue)
 
