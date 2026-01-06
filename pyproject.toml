@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.7.0",
     "rich>=13.7.1",
     "mcp>=1.24.0",
+    "httpx>=0.27.0",
 ]
 
 [project.optional-dependencies]
@@ -21,4 +22,4 @@ dev = [
 ]
 
 [project.scripts]
-linear-issue-maker = "linear_issue_maker.cli:app"
+linear-issue-maker = "linear_issue_maker.cli:main"

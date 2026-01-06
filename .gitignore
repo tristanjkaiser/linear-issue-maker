@@ -5,6 +5,7 @@
 # Test files
 test-auto-create.csv
 examples/
+raw-data/
 
 # Python
 __pycache__/

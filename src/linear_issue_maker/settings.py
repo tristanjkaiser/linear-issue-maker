@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ClientMode(str, Enum):
+    """Client mode selection for Linear API."""
+
+    MCP = "mcp"
+    API = "api"
+    AUTO = "auto"
 
 
 class LinearMCPConfig(BaseSettings):
@@ -67,3 +76,44 @@ class LinearMCPConfig(BaseSettings):
             # Linear's SSE endpoint requires clients to accept text/event-stream.
             "Accept": "text/event-stream",
         }
+
+
+class LinearAPIConfig(BaseSettings):
+    """Settings for direct Linear GraphQL API access."""
+
+    api_url: str = Field(
+        "https://api.linear.app/graphql",
+        description="Linear GraphQL API endpoint.",
+    )
+    access_token: str | None = Field(
+        default=None,
+        description="Linear Personal API Key.",
+    )
+    token_path: Path | None = Field(
+        default=None,
+        description="Optional path to a file that contains the API token.",
+    )
+    http_timeout: float = Field(
+        default=30.0,
+        description="HTTP timeout (seconds) for GraphQL requests.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="LINEAR_API_", env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def _populate_token(self) -> "LinearAPIConfig":
+        """Ensure we have a token either directly or via ``token_path``."""
+
+        if self.access_token:
+            return self
+
+        if self.token_path:
+            token_file = self.token_path.expanduser()
+            if not token_file.exists():  # pragma: no cover - depends on user setup
+                raise ValueError(f"Token file '{token_file}' not found")
+            self.access_token = token_file.read_text(encoding="utf-8").strip()
+
+        if not self.access_token:
+            raise ValueError("Provide LINEAR_API_ACCESS_TOKEN or LINEAR_API_TOKEN_PATH")
+
+        return self

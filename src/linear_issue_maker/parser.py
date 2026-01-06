@@ -15,6 +15,7 @@ class IssueSpec(BaseModel):
     project: str
     title: str
     summary: str
+    template: str | None = None
 
     @field_validator("team", "project", "title", "summary")
     @classmethod
@@ -24,11 +25,20 @@ class IssueSpec(BaseModel):
             raise ValueError(msg)
         return value.strip()
 
+    @field_validator("template")
+    @classmethod
+    def _normalize_template(cls, value: str | None) -> str | None:  # type: ignore[override]
+        """Normalize template field - None if empty string."""
+        if value is None or not value.strip():
+            return None
+        return value.strip()
+
 
 def parse_csv_specs(csv_text: str, delimiter: str = ",") -> list[IssueSpec]:
     """Parse CSV input and return a list of :class:`IssueSpec` objects.
 
-    Expected columns: Team, Project, Title, Summary
+    Required columns: Team, Project, Title, Summary
+    Optional columns: Template
     Additional columns are ignored for forward compatibility.
 
     Args:
@@ -43,6 +53,10 @@ def parse_csv_specs(csv_text: str, delimiter: str = ",") -> list[IssueSpec]:
     """
     if not csv_text.strip():
         raise ValueError("CSV input is empty")
+
+    # Remove BOM if present (Excel on Windows often adds this)
+    if csv_text.startswith('\ufeff'):
+        csv_text = csv_text[1:]
 
     reader = csv.DictReader(StringIO(csv_text), delimiter=delimiter)
 
@@ -62,12 +76,13 @@ def parse_csv_specs(csv_text: str, delimiter: str = ",") -> list[IssueSpec]:
             f"CSV is missing required columns: {missing}. Available columns: {available}"
         )
 
-    # Map normalized names back to actual column names
+    # Map normalized names back to actual column names (required + optional)
     col_map = {
         "team": normalized_fieldnames["team"],
         "project": normalized_fieldnames["project"],
         "title": normalized_fieldnames["title"],
         "summary": normalized_fieldnames["summary"],
+        "template": normalized_fieldnames.get("template"),  # Optional
     }
 
     specs: list[IssueSpec] = []
@@ -81,12 +96,23 @@ def parse_csv_specs(csv_text: str, delimiter: str = ",") -> list[IssueSpec]:
             title = row.get(col_map["title"], "").strip()
             summary = row.get(col_map["summary"], "").strip()
 
+            # Extract optional template (may be None if column doesn't exist)
+            template = None
+            if col_map["template"]:
+                template = row.get(col_map["template"], "").strip() or None
+
             # Skip completely empty rows
             if not any([team, project, title, summary]):
                 continue
 
             # Validate and create IssueSpec
-            spec = IssueSpec(team=team, project=project, title=title, summary=summary)
+            spec = IssueSpec(
+                team=team,
+                project=project,
+                title=title,
+                summary=summary,
+                template=template,
+            )
             specs.append(spec)
 
         except ValueError as e:

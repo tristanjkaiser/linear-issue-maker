@@ -9,11 +9,16 @@ import anyio
 import typer
 from rich import print_json
 
-from .mcp_client import LinearMCPClient, LinearMCPError, _record_id
+from .client_factory import create_client, detect_mode_from_specs
+from .graphql_client import LinearGraphQLError
+from .mcp_client import LinearMCPError, _record_id
 from .parser import IssueSpec, parse_csv_specs
-from .settings import LinearMCPConfig
+from .settings import ClientMode
 
-app = typer.Typer(help="Create Linear issues from CSV files via MCP.")
+app = typer.Typer(
+    help="Create Linear issues from CSV files via MCP or GraphQL API.",
+    add_completion=True,
+)
 
 
 def _read_text(source: Optional[Path]) -> str:
@@ -44,30 +49,45 @@ def create(
         help="Continue processing remaining issues if one fails.",
     ),
     progress: bool = typer.Option(True, help="Show progress during creation."),
+    client_mode: ClientMode = typer.Option(
+        ClientMode.AUTO,
+        "--client-mode",
+        help="Client mode: 'mcp' (MCP server), 'api' (GraphQL API with templates), 'auto' (detect from CSV).",
+    ),
     server_url: Optional[str] = typer.Option(
         None,
         "--server-url",
         envvar="LINEAR_MCP_SERVER_URL",
-        help="Override the Linear MCP URL.",
+        help="Override the Linear MCP URL (MCP mode only).",
+    ),
+    api_url: Optional[str] = typer.Option(
+        None,
+        "--api-url",
+        envvar="LINEAR_API_URL",
+        help="Override the Linear GraphQL API URL (API mode only).",
     ),
     token: Optional[str] = typer.Option(
         None,
         "--token",
-        envvar="LINEAR_MCP_ACCESS_TOKEN",
-        help="Bearer token for Linear MCP.",
+        envvar="LINEAR_ACCESS_TOKEN",
+        help="Linear API token (works for both MCP and API modes).",
     ),
     token_path: Optional[Path] = typer.Option(
         None,
         "--token-path",
-        envvar="LINEAR_MCP_TOKEN_PATH",
+        envvar="LINEAR_TOKEN_PATH",
         exists=True,
         dir_okay=False,
         readable=True,
         resolve_path=True,
-        help="Path to file containing bearer token.",
+        help="Path to file containing API token.",
     ),
 ) -> None:
-    """Create Linear issues from a CSV file."""
+    """Create Linear issues from a CSV file.
+
+    Supports both MCP server and direct GraphQL API modes.
+    Use --client-mode to select, or let 'auto' detect based on template usage.
+    """
 
     # Read and parse CSV
     csv_text = _read_text(input_file)
@@ -80,28 +100,44 @@ def create(
 
     typer.echo(f"Parsed {len(specs)} issue(s) from CSV")
 
+    # Determine and display client mode
+    detected_mode = detect_mode_from_specs(specs)
+    actual_mode = client_mode if client_mode != ClientMode.AUTO else detected_mode
+
     if dry_run:
-        typer.echo("\nDry run – parsed issues:")
+        mode_display = f"{actual_mode.value.upper()} mode"
+        if client_mode == ClientMode.AUTO:
+            mode_display += f" (auto-detected)"
+        typer.echo(f"Client mode: {mode_display}\n")
+
+        typer.echo("Dry run – parsed issues:")
         for i, spec in enumerate(specs, 1):
             typer.echo(f"\n{i}. {spec.title}")
             typer.echo(f"   Team: {spec.team}")
             typer.echo(f"   Project: {spec.project}")
+            if spec.template:
+                typer.echo(f"   Template: {spec.template}")
             typer.echo(f"   Summary: {spec.summary[:100]}{'...' if len(spec.summary) > 100 else ''}")
         raise typer.Exit(code=0)
 
-    # Build config
-    config_kwargs: dict[str, Any] = {}
-    if server_url is not None:
-        config_kwargs["server_url"] = server_url
-    if token is not None:
-        config_kwargs["access_token"] = token
-    if token_path is not None:
-        config_kwargs["token_path"] = token_path
-
+    # Create client based on mode
     try:
-        config = LinearMCPConfig(**config_kwargs)
+        client = create_client(
+            mode=client_mode,
+            specs=specs,
+            server_url=server_url,
+            api_url=api_url,
+            token=token,
+            token_path=token_path,
+        )
+        # Display active mode
+        actual_mode = detect_mode_from_specs(specs) if client_mode == ClientMode.AUTO else client_mode
+        mode_display = f"{actual_mode.value.upper()}"
+        if client_mode == ClientMode.AUTO:
+            mode_display += " (auto-detected)"
+        typer.echo(f"Using {mode_display} client\n")
     except Exception as exc:  # pragma: no cover
-        typer.secho(f"Failed to load MCP configuration: {exc}", fg=typer.colors.RED, err=True)
+        typer.secho(f"Failed to create client: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
 
     # Create issues
@@ -110,7 +146,7 @@ def create(
         failed: list[tuple[IssueSpec, str]] = []
         created_projects: set[str] = set()
 
-        async with LinearMCPClient(config) as client:
+        async with client:
             for i, spec in enumerate(specs, 1):
                 if progress:
                     typer.echo(f"[{i}/{len(specs)}] Creating: {spec.title}")
@@ -146,7 +182,7 @@ def create(
                         issue_url = issue.get("url", "")
                         typer.secho(f"  ✓ Created {issue_id}: {issue_url}", fg=typer.colors.GREEN)
 
-                except LinearMCPError as exc:
+                except (LinearMCPError, LinearGraphQLError) as exc:
                     error_msg = str(exc)
                     failed.append((spec, error_msg))
 
@@ -160,7 +196,7 @@ def create(
 
     try:
         created_issues, failed_issues = anyio.run(_run_batch)
-    except LinearMCPError as exc:
+    except (LinearMCPError, LinearGraphQLError) as exc:
         typer.secho(f"\nBatch creation stopped due to error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
 
@@ -192,5 +228,10 @@ def create(
         raise typer.Exit(code=1)
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point for the CLI."""
     app()
+
+
+if __name__ == "__main__":
+    main()

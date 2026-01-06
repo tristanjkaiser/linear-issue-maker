@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Sequence
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
-from dataclasses import dataclass
 from typing import Any
 
 from mcp import ClientSession, Implementation, McpError
 from mcp.client.sse import sse_client
 from mcp.types import CallToolResult, TextContent
 
+from .base_client import LinearClient, LinearIdentifiers
 from .parser import IssueSpec
 from .settings import LinearMCPConfig
 
@@ -22,23 +22,7 @@ class LinearMCPError(RuntimeError):
     """Domain-specific error for all MCP failures."""
 
 
-@dataclass(slots=True)
-class LinearIdentifiers:
-    """Resolved Linear entities that are required to create an issue."""
-
-    team: JsonDict
-    project: JsonDict
-
-    @property
-    def team_id(self) -> str:
-        return _record_id(self.team)
-
-    @property
-    def project_id(self) -> str:
-        return _record_id(self.project)
-
-
-class LinearMCPClient:
+class LinearMCPClient(LinearClient):
     """High-level helper around the Linear MCP HTTP server."""
 
     def __init__(
@@ -291,6 +275,7 @@ class LinearMCPClient:
 
 
 def _record_id(record: JsonDict) -> str:
+    """Extract ID from a record - used internally by MCP client."""
     for key in ("id", "teamId", "projectId", "templateId", "identifier"):
         if key in record and record[key]:
             return str(record[key])
