@@ -40,6 +40,7 @@ class LinearMCPConfig(BaseSettings):
     )
     list_teams_tool: str = Field("list_teams", description="Tool used to fetch teams.")
     list_projects_tool: str = Field("list_projects", description="Tool used to fetch projects.")
+    list_templates_tool: str = Field("list_templates", description="Tool used to fetch templates.")
     create_issue_tool: str = Field("create_issue", description="Tool used to create a new issue.")
     user_agent: str = Field(
         default="linear-issue-maker/0.1.0",

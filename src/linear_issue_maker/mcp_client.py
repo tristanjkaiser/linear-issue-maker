@@ -118,6 +118,14 @@ class LinearMCPClient(LinearClient):
             "description": spec.summary,
         }
 
+        # Add template if specified
+        if spec.template:
+            # First try to resolve template by name to get ID
+            template_id = await self._resolve_template(spec.template, identifiers.team_id)
+            if template_id:
+                arguments["templateId"] = template_id
+            # Note: If template not found, we continue without it (graceful degradation)
+
         result = await self._call_tool(self.config.create_issue_tool, arguments=arguments)
         return self._extract_structured_dict(result, self.config.create_issue_tool)
 
@@ -141,6 +149,38 @@ class LinearMCPClient(LinearClient):
             # Project not found, create it
             team_name = team.get("name", team_id)
             return await self._create_project(project_name, team_id, team_name)
+
+    async def _resolve_template(self, template_name: str, team_id: str) -> str | None:
+        """Resolve template by name to get its ID.
+
+        Returns:
+            Template ID if found, None otherwise (allows creation without template)
+        """
+        try:
+            # Try to list templates - MCP server may expose this via list_templates tool
+            result = await self._call_tool(self.config.list_templates_tool, {})
+            templates = self._extract_structured_list(result, self.config.list_templates_tool)
+
+            # Match by name (case-insensitive), optionally filter by team
+            needle = template_name.strip().lower()
+            for template in templates:
+                if template.get("name", "").strip().lower() == needle:
+                    # Prefer templates matching the team, but accept any match
+                    if template.get("teamId") == team_id:
+                        return _record_id(template)
+
+            # Try again without team filter
+            for template in templates:
+                if template.get("name", "").strip().lower() == needle:
+                    return _record_id(template)
+
+            # Template not found - return None to create issue without template
+            return None
+
+        except LinearMCPError:
+            # If list_templates tool doesn't exist or fails, return None
+            # This allows graceful degradation
+            return None
 
     async def _list_teams(self) -> list[JsonDict]:
         if self._teams_cache is not None:
