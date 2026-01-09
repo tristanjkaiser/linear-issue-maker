@@ -98,8 +98,22 @@ class LinearAPIConfig(BaseSettings):
         default=30.0,
         description="HTTP timeout (seconds) for GraphQL requests.",
     )
+    template_mappings: dict[str, str] = Field(
+        default_factory=dict,
+        description="Template name to ID mappings (e.g., LINEAR_TEMPLATE_STORY=template-id).",
+    )
 
     model_config = SettingsConfigDict(env_prefix="LINEAR_API_", env_file=".env", extra="ignore")
+
+    def __init__(self, **kwargs):
+        """Initialize and parse template mappings from environment variables."""
+        super().__init__(**kwargs)
+        # Parse LINEAR_TEMPLATE_* environment variables
+        import os
+        for key, value in os.environ.items():
+            if key.startswith("LINEAR_TEMPLATE_"):
+                template_name = key[16:].lower()  # Remove LINEAR_TEMPLATE_ prefix
+                self.template_mappings[template_name] = value.strip()
 
     @model_validator(mode="after")
     def _populate_token(self) -> "LinearAPIConfig":

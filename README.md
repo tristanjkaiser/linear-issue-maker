@@ -34,10 +34,10 @@ A Python CLI that creates Linear issues from CSV files using either the Linear M
 3. Create issues from CSV:
    ```bash
    # Basic usage (auto-detects client mode)
-   linear-issue-maker create -i examples/issues.csv --no-dry-run
+   linear-issue-maker -i examples/issues.csv
 
    # With templates (automatically uses API mode)
-   linear-issue-maker create -i examples/issues_with_templates.csv --no-dry-run
+   linear-issue-maker -i examples/issues_with_templates.csv
    ```
 
 ## Usage
@@ -68,24 +68,24 @@ Engineering,Frontend,Update dashboard,"Redesign the main dashboard UI",
 ### Commands
 
 ```bash
-# Preview issues (dry-run, shows detected client mode)
-linear-issue-maker create -i issues.csv
-
 # Create all issues (auto-detects mode based on Template column)
-linear-issue-maker create -i issues.csv --no-dry-run
+linear-issue-maker -i issues.csv
+
+# Preview issues before creating (dry-run, shows detected client mode)
+linear-issue-maker -i issues.csv --dry-run
 
 # Force specific client mode
-linear-issue-maker create -i issues.csv --no-dry-run --client-mode api
-linear-issue-maker create -i issues.csv --no-dry-run --client-mode mcp
+linear-issue-maker -i issues.csv --client-mode api
+linear-issue-maker -i issues.csv --client-mode mcp
 
 # Auto-create missing projects
-linear-issue-maker create -i issues.csv --no-dry-run --create-missing-projects
+linear-issue-maker -i issues.csv --create-missing-projects
 
 # Continue even if some issues fail
-linear-issue-maker create -i issues.csv --no-dry-run --continue-on-error
+linear-issue-maker -i issues.csv --continue-on-error
 
 # Use tab-separated values
-linear-issue-maker create -i issues.tsv --delimiter $'\t' --no-dry-run
+linear-issue-maker -i issues.tsv --delimiter $'\t'
 ```
 
 ## Configuration
@@ -122,6 +122,26 @@ The tool supports two client modes:
 **API-specific:**
 - `LINEAR_API_ACCESS_TOKEN`: GraphQL API token (deprecated, use LINEAR_ACCESS_TOKEN)
 - `LINEAR_API_URL`: Override GraphQL endpoint (default: `https://api.linear.app/graphql`)
+
+**Template Mappings (API mode only):**
+
+You can map template names to specific template IDs using environment variables. This is useful when you have multiple templates with the same name and want to control which one is used.
+
+Format: `LINEAR_TEMPLATE_<NAME>=<template-id>`
+
+Example:
+```bash
+export LINEAR_TEMPLATE_STORY=5e6f00c2-c508-477c-a0cc-1eb6b48d865e
+export LINEAR_TEMPLATE_BUG=a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
+Or in `.env`:
+```
+LINEAR_TEMPLATE_STORY=5e6f00c2-c508-477c-a0cc-1eb6b48d865e
+LINEAR_TEMPLATE_BUG=a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
+When a template mapping is set, it takes precedence over auto-detection from the Linear API.
 
 ### CLI Flags
 

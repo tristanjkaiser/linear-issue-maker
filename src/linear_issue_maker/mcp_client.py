@@ -24,7 +24,7 @@ class LinearMCPError(RuntimeError):
 
 class LinearMCPClient(LinearClient):
     """High-level helper around the Linear MCP HTTP server."""
-
+    
     def __init__(
         self,
         config: LinearMCPConfig,

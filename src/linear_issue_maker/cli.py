@@ -27,7 +27,7 @@ def _read_text(source: Optional[Path]) -> str:
     return typer.get_text_stream("stdin").read()
 
 
-@app.command()
+@app.command(name="create")
 def create(
     input_file: Optional[Path] = typer.Option(
         None,
@@ -38,10 +38,10 @@ def create(
         readable=True,
         help="Path to the CSV file. Reads stdin when omitted.",
     ),
-    dry_run: bool = typer.Option(True, help="When true, only parse and display the issues."),
+    dry_run: bool = typer.Option(False, help="When true, only parse and display the issues."),
     delimiter: str = typer.Option(",", help="CSV delimiter character (default: comma)."),
     create_missing_projects: bool = typer.Option(
-        False,
+        True,
         help="Automatically create projects if they don't exist.",
     ),
     continue_on_error: bool = typer.Option(

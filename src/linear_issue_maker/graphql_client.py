@@ -26,10 +26,12 @@ class LinearGraphQLClient(LinearClient):
         access_token: str,
         *,
         http_timeout: float = 30.0,
+        template_mappings: dict[str, str] | None = None,
     ) -> None:
         self.api_url = api_url
         self.access_token = access_token
         self.http_timeout = http_timeout
+        self.template_mappings = template_mappings or {}
         self._client: httpx.AsyncClient | None = None
 
         # Simple caches to avoid duplicate lookups within a single CLI invocation
@@ -88,13 +90,20 @@ class LinearGraphQLClient(LinearClient):
             }
         }
 
+        # Track whether we need to add summary as a comment
+        add_summary_as_comment = False
+
         # Add template if specified
         if spec.template:
-            # First try to resolve template by name
             template_id = await self._resolve_template(spec.template, identifiers.team_id)
             if template_id:
+                # Use template and add summary as a comment to preserve template body
                 variables["input"]["templateId"] = template_id
-            # Note: If template not found, we continue without it (graceful degradation)
+                del variables["input"]["description"]  # Let template provide the description
+                add_summary_as_comment = True
+                print(f"   → Applying template '{spec.template}' (ID: {template_id})")
+            else:
+                print(f"   ⚠️  Template '{spec.template}' not found - creating issue without template")
 
         result = await self._execute_graphql(mutation, variables)
 
@@ -105,7 +114,52 @@ class LinearGraphQLClient(LinearClient):
         if not issue:
             raise LinearGraphQLError("No issue returned from creation")
 
+        # Add summary as comment if needed (template used but description not available)
+        if add_summary_as_comment and spec.summary.strip():
+            await self._create_comment(issue["id"], spec.summary)
+
         return issue
+
+    async def _create_comment(self, issue_id: str, body: str) -> JsonDict:
+        """Create a comment on an issue.
+
+        Args:
+            issue_id: The Linear issue ID
+            body: The comment body text
+
+        Returns:
+            The created comment object
+        """
+        mutation = """
+        mutation CommentCreate($input: CommentCreateInput!) {
+            commentCreate(input: $input) {
+                success
+                comment {
+                    id
+                    body
+                    createdAt
+                }
+            }
+        }
+        """
+
+        variables = {
+            "input": {
+                "issueId": issue_id,
+                "body": body,
+            }
+        }
+
+        result = await self._execute_graphql(mutation, variables)
+
+        if not result.get("commentCreate", {}).get("success"):
+            raise LinearGraphQLError("Comment creation failed")
+
+        comment = result["commentCreate"]["comment"]
+        if not comment:
+            raise LinearGraphQLError("No comment returned from creation")
+
+        return comment
 
     async def _resolve_team(self, team_name: str) -> JsonDict:
         """Resolve team by name or ID."""
@@ -133,17 +187,22 @@ class LinearGraphQLClient(LinearClient):
         """Resolve template by name to get its ID.
 
         Returns:
-            Template ID if found, None otherwise (allows creation without template)
+            Template ID if found, None otherwise
         """
-        # Query templates through team - Linear's templates are workspace-wide
-        # but we query through the team for context
+        # Check if template name is mapped to a specific ID via environment variable
+        needle = template_name.strip().lower()
+        if needle in self.template_mappings:
+            return self.template_mappings[needle]
+
+        # Otherwise, query templates from Linear API
         query = """
         query Templates {
             templates {
                 id
                 name
-                type
-                teamId
+                team {
+                    id
+                }
             }
         }
         """
@@ -153,23 +212,25 @@ class LinearGraphQLClient(LinearClient):
             templates = result.get("templates", [])
 
             # Match by name (case-insensitive), optionally filter by team
-            needle = template_name.strip().lower()
+            # First pass: prefer templates matching the team
             for template in templates:
-                if template.get("name", "").strip().lower() == needle:
-                    # Prefer templates matching the team, but accept any match
-                    if template.get("teamId") == team_id:
+                template_name_actual = template.get("name", "").strip().lower()
+                if template_name_actual == needle:
+                    template_team_id = template.get("team", {}).get("id") if template.get("team") else None
+                    if template_team_id == team_id:
                         return template["id"]
 
-            # Try again without team filter
+            # Second pass: accept any workspace-wide template match
             for template in templates:
                 if template.get("name", "").strip().lower() == needle:
                     return template["id"]
 
-            # Template not found - return None to create issue without template
+            # Template not found
             return None
 
-        except Exception:
-            # If template resolution fails, continue without template
+        except Exception as exc:
+            # If template resolution fails, warn and continue without template
+            print(f"⚠️  Template resolution failed: {exc}")
             return None
 
     async def _list_teams(self) -> list[JsonDict]:

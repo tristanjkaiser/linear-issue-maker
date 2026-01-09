@@ -77,6 +77,7 @@ def create_client(
             api_url=config.api_url,
             access_token=config.access_token,
             http_timeout=config.http_timeout,
+            template_mappings=config.template_mappings,
         )
 
     else:
